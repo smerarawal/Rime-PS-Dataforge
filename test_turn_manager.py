@@ -88,12 +88,12 @@ async def test_cancel_and_fence_fallback_catches_finished_stale_task():
     stamped = tm.stamp()
 
     async def fast_uncancellable_work():
-        # Shield simulates a task that finishes despite cancel() being called
         await asyncio.sleep(0.01)
         return "leaked result"
 
-    task = asyncio.create_task(asyncio.shield(fast_uncancellable_work()))
-    await asyncio.sleep(0.02)  # let it finish first
+    task = asyncio.create_task(fast_uncancellable_work())
+    await asyncio.sleep(0.02)  # let it finish first — cancel() below will be a no-op,
+                                # simulating cancellation arriving too late
     tm.start_new_turn()        # now mark it stale
 
     result = await tm.cancel_and_fence(task, stamped)
