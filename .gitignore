@@ -1,0 +1,8 @@
+.env 
+.env.local 
+__pycache__/ 
+*.pyc 
+node_modules/ 
+agent-starter-react/.next/ 
+agent-starter-react/.env.local 
+agent-starter-react/node_modules/ 
