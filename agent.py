@@ -1,4 +1,5 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
@@ -8,6 +9,7 @@ from livekit.plugins.openai import LLM as GroqLLM  # Groq uses OpenAI-compatible
 from turn_manager import TurnManager
 from tools import register_tools
 from metrics import MetricsLog
+from metrics_ws_bridge import run_ws_bridge
 
 load_dotenv()
 
@@ -66,6 +68,7 @@ class Assistant(Agent):
 
 
 async def entrypoint(ctx: agents.JobContext):
+    asyncio.create_task(run_ws_bridge())
     await ctx.connect()
 
     stress_delay = os.environ.get("STRESS_TEST_TOOL_DELAY_MS", "0")
