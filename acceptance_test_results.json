@@ -1,0 +1,20 @@
+[
+  {
+    "event": "interrupt_detected",
+    "timestamp": 1788602804.0983505,
+    "turn_id": 1,
+    "trial": 19
+  },
+  {
+    "event": "audio_stopped",
+    "timestamp": 1788602804.0983505,
+    "turn_id": 1,
+    "trial": 19
+  },
+  {
+    "event": "stale_result_correctly_blocked",
+    "timestamp": 1788602807.6104755,
+    "turn_id": 1,
+    "trial": 19
+  }
+]

@@ -26,6 +26,15 @@ class TurnManager:
     def __init__(self):
         self.current_turn_id = 0
         self._log = []
+        # Tracks only the currently-running TOOL task (e.g. a slow order
+        # lookup), not the broader LLM generation task. Cancelling the whole
+        # generation task turned out to be too broad — it also disrupted the
+        # framework's own bookkeeping for generating a fresh reply to the
+        # NEW turn, causing it to fall back to a generic "I don't know"
+        # instead of actually answering. Cancelling only the narrow tool
+        # task avoids that side effect while still stopping a slow lookup
+        # dead rather than letting it run to completion.
+        self.active_tool_task = None
 
     def start_new_turn(self) -> int:
         """Call this whenever a new user utterance is committed, or on interrupt."""
@@ -42,6 +51,7 @@ class TurnManager:
         """The critical check — call this again right before speaking/using
         a result, not just once when the work started."""
         stale = stamped_id != self.current_turn_id
+        print(f"[TURN_MANAGER] is_stale check: stamped={stamped_id}, current={self.current_turn_id}, stale={stale}")
         if stale:
             self._log_event("discarded_stale", stamped_id)
         return stale
@@ -74,6 +84,20 @@ class TurnManager:
         if self.is_stale(stamped_id):
             return None
         return task.result()
+
+    def cancel_active_tool_task(self):
+        """Called on interrupt, in addition to start_new_turn(). Cancels
+        only the currently in-flight TOOL task (e.g. a slow order lookup's
+        asyncio.sleep), not the broader generation task the framework
+        itself depends on. This closes the gap where a tool-call
+        continuation, invoked fresh AFTER the turn has already advanced,
+        would otherwise get re-stamped with the new current turn id and
+        slip past is_stale() undetected — without the side effect of
+        disrupting the framework's own reply-generation orchestration for
+        the NEW turn."""
+        if self.active_tool_task is not None and not self.active_tool_task.done():
+            self.active_tool_task.cancel()
+            self._log_event("active_tool_task_cancelled_on_interrupt", self.current_turn_id)
 
     def _log_event(self, event: str, turn_id: int, detail: str = ""):
         self._log.append({
