@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
 
+    rime_api_key: str = ""
+    rime_model_id: str = "mistv2"
+    rime_speaker: str = "cove"
+    rime_sampling_rate: int = 24000
+
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "INFO"
@@ -31,6 +36,9 @@ class Settings(BaseSettings):
 
     def gemini_configured(self) -> bool:
         return bool(self.gemini_api_key.strip())
+
+    def rime_configured(self) -> bool:
+        return bool(self.rime_api_key.strip())
 
 
 @lru_cache(maxsize=1)

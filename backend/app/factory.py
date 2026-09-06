@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.app.adapters.rime import MockTTSProvider, TTSProvider
+from backend.app.adapters.rime import MockTTSProvider, RimeTTSProvider, TTSProvider
 from backend.app.config import Settings, get_settings
 from backend.app.core.events import EventBus
 from backend.app.core.orchestrator import Orchestrator
@@ -34,7 +34,19 @@ def build_llm(settings: Settings | None = None) -> LLMProvider:
 def build_tts(settings: Settings | None = None) -> TTSProvider:
     cfg = settings or get_settings()
     if cfg.tts_provider == "rime":
-        log_operation(logger, "rime_not_configured_fallback_mock")
+        if not cfg.rime_configured():
+            log_operation(logger, "rime_missing_key_fallback_mock")
+            return MockTTSProvider()
+        try:
+            return RimeTTSProvider(
+                api_key=cfg.rime_api_key,
+                model_id=cfg.rime_model_id,
+                speaker=cfg.rime_speaker,
+                sampling_rate=cfg.rime_sampling_rate,
+            )
+        except Exception as exc:
+            log_operation(logger, "rime_init_failed_fallback_mock", error=str(exc))
+            return MockTTSProvider()
     return MockTTSProvider()
 
 
