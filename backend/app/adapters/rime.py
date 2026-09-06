@@ -150,11 +150,9 @@ class RimeTTSProvider(TTSProvider):
     closes the websocket directly, so both the passive staleness check and
     an active connection-level cutoff work together as defense-in-depth.
 
-    NOTE on the audio-chunk JSON key: Rime's docs describe /ws3 chunk
-    messages as carrying base64 audio but the exact field name wasn't
-    confirmed against a live response while writing this. This checks a
-    couple of plausible key names (`data`, `audio`) — run one real call
-    and print the raw message once to confirm, then simplify if needed.
+    NOTE on the audio-chunk JSON key: confirmed via a live /ws3 call
+    (see test_rime_live_manual.py) that chunk messages always carry audio
+    under the `data` key. The adapter reads that key directly.
     """
 
     name = "rime"
