@@ -15,6 +15,12 @@ was an exploration phase superseded by this Orchestrator design.
   adapter was simplified accordingly (commit `7df8017`).
 - Confirmed `RimeTTSProvider.speak()` receives real, non-empty audio bytes
   through the full adapter code path, not just a raw connection.
+- **Re-run against the live API (2026-09-06):** raw probe received 51
+  messages of a real spoken response, every `chunk` message carrying audio
+  under `data` as expected, plus one `timestamps`-type message (word-level
+  timing data) which the adapter correctly ignores since it only acts on
+  `chunk`/`done`/`error`. The full-adapter run completed with
+  `completed_at` set and **135,418 real audio bytes received**.
 
 ## 2. Unit-level correctness (`test_rime_adapter_manual.py`, mocked websocket)
 
@@ -63,11 +69,12 @@ pytest -q
 
 ## 5. Known gaps / not yet covered
 
-- All of the above (§3) mocks the websocket layer for determinism. A live,
-  real-API run of the same interrupt-during-stream scenario has not been
-  done — `test_rime_live_manual.py` verifies API correctness but doesn't
-  exercise the interrupt race. Recommended as a final manual check with a
-  real `RIME_API_KEY` before submission, if time allows.
+- §3's interrupt-during-stream race is verified against a mocked websocket
+  (deterministic/CI-safe) rather than the live API — API correctness itself
+  (§1) has now been confirmed live, but the interrupt race specifically has
+  not been re-run against real network timing. Low risk given `stop()`'s
+  design (flag flip before I/O), but worth a manual live check if time
+  allows.
 - These numbers cover the `RimeTTSProvider` adapter and `Orchestrator`
   fencing only. End-to-end browser/LiveKit-room testing (real mic input,
   real playback) is Nikunj's `RealtimeInputAdapter` scope, not covered here.
