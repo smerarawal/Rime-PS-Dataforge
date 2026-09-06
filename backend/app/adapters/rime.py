@@ -271,7 +271,7 @@ class RimeTTSProvider(TTSProvider):
                         message = json.loads(raw)
                         msg_type = message.get("type")
                         if msg_type == "chunk":
-                            audio_b64 = message.get("data") or message.get("audio")
+                            audio_b64 = message.get("data")
                             if audio_b64:
                                 self._audio_bytes.extend(base64.b64decode(audio_b64))
                         elif msg_type == "done":
