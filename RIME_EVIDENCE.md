@@ -6,9 +6,16 @@ back it. Every number below is reproducible from a clean checkout.
 Reproduce the offline evidence:
 
 ```bash
-pytest -q                                          # 73 tests
+pytest -q                                          # 107 tests (73 agent + 34 orchestrator)
 python acceptance_test.py --trials 20              # exits non-zero on failure
 ```
+
+Both runtimes in this repo are covered by that one command: the LiveKit voice
+agent (`test_*.py` at the root) and the orchestrator service
+(`backend/tests`). The orchestrator keeps its own separate evidence notes in
+[docs/RIME_EVIDENCE.md](docs/RIME_EVIDENCE.md), including a live confirmation
+of Rime's ws3 audio-key behaviour; this document covers the voice agent and
+the properties the two runtimes now share.
 
 Reproduce the live evidence (needs real credentials in `.env`):
 
@@ -213,6 +220,38 @@ What differs is only the fate of the tool work.
 `StaleResultError` or `CancelledError` — the result does not merely go unused,
 it cannot be produced.
 
+### The same rules in the orchestrator runtime
+
+The orchestrator service merged in from the `atharva` branch had the failure
+this section describes: **any** utterance arriving while it was busy
+superseded the in-flight request, and it paid an `analyze_intent` LLM
+round-trip on the interrupt path to decide what to do next.
+
+It now shares `continuity.UtteranceRouter` with the voice agent, so a status
+question, a backchannel and an explicit cancel are handled the same way in
+both runtimes. Measured by `backend/tests/test_continuity_fast_path.py`, with
+the tool held mid-flight on an explicit `started`/`release` gate rather than a
+sleep:
+
+| Utterance during a running search | Request superseded | Tool restarted | LLM called |
+|---|---|---|---|
+| "are you still there?" | no | no (`calls == 1`) | **no** |
+| "mhm" | no | no | **no** |
+| "never mind" | cancelled + confirmed | no | **no** |
+| "what is your refund policy" | yes | n/a | yes |
+
+The no-LLM assertion carries a negative control in the same test: after
+asserting the fast path made zero calls, it sends a genuinely new request and
+asserts the counter then reads exactly one — so the test cannot pass because
+the counter was wired up wrong.
+
+Constraints deliberately still fall through to the original
+supersede-and-reanalyse path in that runtime. A refinement like "under 5000"
+has to change the tool's parameters there, which means re-running it with
+merged context — which `ContextManager.merge` already does correctly. Carrying
+the work forward, as the voice agent does, would keep a search running against
+parameters the user just changed.
+
 ### Honest limits
 
 - Classification is regex-based. It will misread phrasings the patterns do not
@@ -232,6 +271,33 @@ it cannot be produced.
 
 ---
 
+## Observability
+
+Every claim above is also visible while you talk to the agent. `agent.py`
+runs the metrics bridge in-process and pushes each event to the dashboard in
+`prisha-react/` over `ws://localhost:8765`.
+
+The bridge is push-based (`MetricsLog.subscribe`) rather than polling. That
+matters for honesty as much as for speed: the previous 50ms poll loop meant a
+dashboard timestamp could sit up to 50ms behind the event it described, which
+is a meaningful fraction of the very latencies being displayed. The subscriber
+callback only enqueues — all sending happens on a separate task — so
+observability cannot add latency to the interrupt path it is measuring.
+
+The dashboard derives, from the raw event stream:
+
+- **TTFA p50/p95** from `first_audio_frame` (percentiles, not a mean — the
+  tail is what a caller notices),
+- **work kept vs superseded** from `utterance_routed`, which is the
+  continuity claim rendered live,
+- **stale discards** from both `stale_result_discarded` (LLM node) and
+  `stale_audio_discarded` (TTS node),
+- **how much of an interrupted reply was actually heard**, from
+  `history_reconciled`.
+
+A client connecting mid-session is sent the recent backlog first, so opening
+the dashboard after an interesting turn still shows it.
+
 ## Test inventory
 
 | File | Covers |
@@ -241,3 +307,5 @@ it cannot be produced.
 | `test_playback.py` | truncation to played audio, word boundaries, under-report bias, live-path denominator |
 | `test_continuity.py` | intent classification, carry-forward, cancellation, and the async path end-to-end |
 | `acceptance_test.py` | all three claims as pass/fail gates with exported evidence |
+| `backend/tests/test_continuity_fast_path.py` | the same continuity rules inside the orchestrator runtime: status/backchannel/cancel handled without superseding the in-flight search or calling the LLM |
+| `backend/tests/` (existing) | request/generation fencing, cancellation, race conditions, context preservation, websocket events |

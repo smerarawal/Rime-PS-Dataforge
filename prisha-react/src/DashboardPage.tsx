@@ -126,7 +126,27 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 12, color: c.muted, marginBottom: 4 }}>
                     {new Date(t.ts * 1000).toLocaleTimeString()}
                   </div>
+                  {t.intent && (
+                    <div style={{ fontSize: 12, marginBottom: 4 }}>
+                      <span style={{
+                        background: t.workKept ? "#E7F3EC" : "#F3F4F6",
+                        color: t.workKept ? c.green : c.muted,
+                        borderRadius: 999,
+                        padding: "2px 10px",
+                      }}>
+                        {t.intent.replace(/_/g, " ")}{t.workKept ? " · work kept" : ""}
+                      </span>
+                      {t.ttfaMs != null && (
+                        <span style={{ marginLeft: 8, color: c.muted }}>{t.ttfaMs.toFixed(0)}ms to audio</span>
+                      )}
+                    </div>
+                  )}
                   {t.text && <div style={{ fontSize: 15 }}>{t.text}</div>}
+                  {t.heardFraction != null && (
+                    <div style={{ marginTop: 6, fontSize: 13, color: c.pink }}>
+                      interrupted — user heard {(t.heardFraction * 100).toFixed(0)}% of this reply
+                    </div>
+                  )}
                   {t.tools.map((tool, j) => (
                     <div key={j} style={{ marginTop: 6, fontSize: 13, color: tool.status === "discarded" ? c.pink : c.green }}>
                       {tool.source ?? "tool"} — {tool.status}
@@ -140,10 +160,38 @@ export default function DashboardPage() {
         )}
 
         {tab === "Metrics" && (
-          <div style={{ display: "flex", gap: 48 }}>
-            <Stat label="avg audio-stop" value={`${metrics.avgAudioStopLatencyMs.toFixed(0)}ms`} color={c.ink} />
-            <Stat label="discarded" value={String(metrics.staleDiscarded)} color={c.green} />
-            <Stat label="leaked" value={String(metrics.staleLeaked)} color={metrics.staleLeaked ? c.pink : c.ink} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+            <div>
+              <div style={{ fontSize: 12, color: c.muted, marginBottom: 12, letterSpacing: 0.4 }}>
+                PERCEIVED RESPONSE TIME — end of speech to first Rime audio
+              </div>
+              <div style={{ display: "flex", gap: 48 }}>
+                <Stat label="TTFA p50" value={metrics.ttfaSamples ? `${metrics.ttfaP50Ms.toFixed(0)}ms` : "–"} color={c.ink} />
+                <Stat label="TTFA p95" value={metrics.ttfaSamples ? `${metrics.ttfaP95Ms.toFixed(0)}ms` : "–"} color={c.ink} />
+                <Stat label="turns measured" value={String(metrics.ttfaSamples)} color={c.muted} />
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, color: c.muted, marginBottom: 12, letterSpacing: 0.4 }}>
+                INTERRUPTION — stale results are counted, never spoken
+              </div>
+              <div style={{ display: "flex", gap: 48 }}>
+                <Stat label="avg audio-stop" value={`${metrics.avgAudioStopLatencyMs.toFixed(0)}ms`} color={c.ink} />
+                <Stat label="discarded" value={String(metrics.staleDiscarded)} color={c.green} />
+                <Stat label="leaked" value={String(metrics.staleLeaked)} color={metrics.staleLeaked ? c.pink : c.ink} />
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, color: c.muted, marginBottom: 12, letterSpacing: 0.4 }}>
+                CONTINUITY — what happened to tool work when the user spoke
+              </div>
+              <div style={{ display: "flex", gap: 48 }}>
+                <Stat label="work kept" value={String(metrics.workKept)} color={c.green} />
+                <Stat label="superseded" value={String(metrics.workSuperseded)} color={c.ink} />
+              </div>
+            </div>
           </div>
         )}
 

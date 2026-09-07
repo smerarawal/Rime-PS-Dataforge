@@ -1,15 +1,15 @@
 {
-  "generated_at": 1788797450.4562469,
+  "generated_at": 1788797861.6911933,
   "trials": 20,
   "tool_delay_ms": 4000,
   "suites": [
     {
       "suite": "A. perceived response time",
       "passed": true,
-      "instrumentation_overhead_us_per_turn": 4.68,
+      "instrumentation_overhead_us_per_turn": 4.13,
       "filler_threshold_ms": 300.0,
-      "perceived_time_to_audio_p50_ms": 310.9,
-      "perceived_time_to_audio_p95_ms": 313.5,
+      "perceived_time_to_audio_p50_ms": 312.0,
+      "perceived_time_to_audio_p95_ms": 313.8,
       "note": "Perceived-time numbers are for the gap-cover path only. Real pipeline TTFA comes from a live run (live_session_latency.json)."
     },
     {
@@ -40,7 +40,7 @@
           "work_kept": true,
           "result_delivered": true,
           "immediate_reply": "Still checking order 1002 \u2014 just started.",
-          "routing_decision_ms": 0.272,
+          "routing_decision_ms": 0.133,
           "outcome_if_dropped": null,
           "passed": true
         },
@@ -51,7 +51,7 @@
           "work_kept": true,
           "result_delivered": true,
           "immediate_reply": "Still checking order 1002 \u2014 just started.",
-          "routing_decision_ms": 0.045,
+          "routing_decision_ms": 0.057,
           "outcome_if_dropped": null,
           "passed": true
         },
@@ -62,7 +62,7 @@
           "work_kept": true,
           "result_delivered": true,
           "immediate_reply": "Got it \u2014 while you're at it check the refund too. Still checking order 1002.",
-          "routing_decision_ms": 0.103,
+          "routing_decision_ms": 0.175,
           "outcome_if_dropped": null,
           "passed": true
         },
@@ -73,7 +73,7 @@
           "work_kept": true,
           "result_delivered": true,
           "immediate_reply": null,
-          "routing_decision_ms": 0.028,
+          "routing_decision_ms": 0.061,
           "outcome_if_dropped": null,
           "passed": true
         },
@@ -84,7 +84,7 @@
           "work_kept": false,
           "result_delivered": false,
           "immediate_reply": "Okay, I've stopped checking order 1002. What would you like instead?",
-          "routing_decision_ms": 0.111,
+          "routing_decision_ms": 0.08,
           "outcome_if_dropped": "CancelledError",
           "passed": true
         },
@@ -95,12 +95,12 @@
           "work_kept": false,
           "result_delivered": false,
           "immediate_reply": null,
-          "routing_decision_ms": 0.06,
+          "routing_decision_ms": 0.105,
           "outcome_if_dropped": "CancelledError",
           "passed": true
         }
       ],
-      "worst_routing_decision_ms": 0.272,
+      "worst_routing_decision_ms": 0.175,
       "note": "Routing runs on the interrupt path, so its cost is part of perceived latency \u2014 it is asserted to stay under 5ms and needs no model round-trip."
     }
   ],
@@ -108,19 +108,19 @@
   "events": [
     {
       "event": "interrupt_detected",
-      "timestamp": 1788797448.7121685,
+      "timestamp": 1788797859.9144723,
       "turn_id": 1,
       "trial": 19
     },
     {
       "event": "tool_task_cancelled",
-      "timestamp": 1788797448.7121685,
+      "timestamp": 1788797859.9144723,
       "turn_id": 1,
       "trial": 19
     },
     {
       "event": "tool_cancellation_resolved",
-      "timestamp": 1788797448.7121685,
+      "timestamp": 1788797859.9144723,
       "turn_id": 1,
       "trial": 19
     }

@@ -8,7 +8,22 @@ type TurnEntry = {
   text?: string;
   tools: { source?: string; status: "pending" | "discarded"; chunks?: number }[];
   ts: number;
+  /** How the agent classified the utterance that opened this turn. */
+  intent?: string;
+  /** Whether in-flight tool work survived that utterance. */
+  workKept?: boolean;
+  /** Time from end-of-speech to the first Rime audio frame, in ms. */
+  ttfaMs?: number;
+  /** Fraction of an interrupted reply the user actually heard. */
+  heardFraction?: number;
 };
+
+function percentile(values: number[], pct: number): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(Math.floor(sorted.length * pct), sorted.length - 1);
+  return sorted[idx];
+}
 
 export function useMetricsSocket(url = "ws://localhost:8765") {
   const [events, setEvents] = useState<MetricEvent[]>([]);
@@ -61,6 +76,17 @@ export function useMetricsSocket(url = "ws://localhost:8765") {
     if (e.event === "stale_result_discarded") {
       entry.tools.push({ source: e.source, status: "discarded", chunks: e.chunks_yielded_before_discard });
     }
+    // Audio-level fence: frames stopped mid-utterance, which the LLM-level
+    // fence cannot do on its own.
+    if (e.event === "stale_audio_discarded") {
+      entry.tools.push({ source: "tts_node", status: "discarded", chunks: e.frames_emitted_before_discard });
+    }
+    if (e.event === "utterance_routed") {
+      entry.intent = e.intent;
+      entry.workKept = e.work_kept;
+    }
+    if (e.event === "first_audio_frame") entry.ttfaMs = e.ttfa_ms;
+    if (e.event === "history_reconciled") entry.heardFraction = e.played_fraction;
   }
 
   // derive metrics
@@ -74,8 +100,22 @@ export function useMetricsSocket(url = "ws://localhost:8765") {
       audioStopLatencies.push(e.timestamp - interruptTs);
       interruptTs = null;
     }
-    if (e.event === "stale_result_discarded") staleDiscarded++;
-    if (e.event === "stale_result_leaked") staleLeaked++;
+    if (e.event === "stale_result_discarded" || e.event === "stale_audio_discarded") staleDiscarded++;
+    if (e.event === "stale_result_leaked" || e.event === "STALE_RESULT_LEAKED") staleLeaked++;
+  }
+
+  // Perceived response time: end-of-speech to first Rime audio frame.
+  const ttfas: number[] = [];
+  // Continuity: how often an utterance during tool work kept that work alive
+  // instead of throwing it away.
+  let workKept = 0;
+  let workSuperseded = 0;
+  for (const e of events) {
+    if (e.event === "first_audio_frame" && typeof e.ttfa_ms === "number") ttfas.push(e.ttfa_ms);
+    if (e.event === "utterance_routed") {
+      if (e.work_kept) workKept++;
+      else workSuperseded++;
+    }
   }
   const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 
@@ -90,6 +130,13 @@ export function useMetricsSocket(url = "ws://localhost:8765") {
       avgAudioStopLatencyMs: avg(audioStopLatencies) * 1000,
       staleDiscarded,
       staleLeaked,
+      // TTFA is reported as p50/p95 rather than a mean: the tail is what a
+      // caller actually notices, and a mean hides it.
+      ttfaP50Ms: percentile(ttfas, 0.5),
+      ttfaP95Ms: percentile(ttfas, 0.95),
+      ttfaSamples: ttfas.length,
+      workKept,
+      workSuperseded,
     },
   };
 }
