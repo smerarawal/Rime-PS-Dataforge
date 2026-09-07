@@ -34,6 +34,20 @@ from continuity import (
 
 logger = get_logger(__name__)
 
+# Spoken descriptions of in-flight work. The raw intent slug is not speakable
+# ("Still search hotels — just started"), and a status line that sounds like a
+# machine reading a variable name is worse than no status line at all.
+_INTENT_PHRASES = {
+    "search_hotels": "searching for hotels",
+    "modify_search": "updating that search",
+}
+
+
+def _describe_intent(intent: str | None) -> str:
+    if not intent:
+        return "working on that"
+    return _INTENT_PHRASES.get(intent, f"working on your {intent.replace('_', ' ')} request")
+
 _BUSY = {
     ConversationStatus.THINKING,
     ConversationStatus.EXECUTING,
@@ -171,13 +185,12 @@ class Orchestrator:
 
         if intent is Intent.STATUS_REQUEST:
             elapsed = (utcnow() - current.created_at).total_seconds()
-            description = current.intent.replace("_", " ") if current.intent else "working on that"
-            sentence = status_sentence_for(description, elapsed)
+            sentence = status_sentence_for(_describe_intent(current.intent), elapsed)
             await self._speak_without_disturbing_work(sentence, current, kind="status")
             return True
 
         if intent is Intent.CANCEL:
-            description = current.intent.replace("_", " ") if current.intent else "that"
+            description = _describe_intent(current.intent)
             await self.handle_interrupt(reason="user_cancelled")
             # Spoken after the interrupt, and deliberately not routed through
             # the validator: this confirmation belongs to the utterance that

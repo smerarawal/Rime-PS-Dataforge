@@ -172,3 +172,23 @@ async def test_status_question_leaves_the_conversation_status_intact() -> None:
         status_before = ctx.o.get_state().status
         await ctx.o.handle_user_message("how's that going")
         assert ctx.o.get_state().status == status_before
+
+
+async def test_status_line_is_speakable_not_a_variable_name() -> None:
+    """The status sentence is spoken aloud by Rime. "Still search_hotels" —
+    or its de-underscored cousin "Still search hotels" — is worse than saying
+    nothing, so the intent slug is mapped to a real phrase."""
+    async with RunningSearch() as ctx:
+        await ctx.o.handle_user_message("are you still there?")
+        spoken = ctx.o.tts.last_text or ""
+
+    assert "searching for hotels" in spoken
+    assert "search_hotels" not in spoken
+    assert "Still search hotels" not in spoken
+
+
+async def test_unknown_intent_still_produces_a_sentence() -> None:
+    from backend.app.core.orchestrator import _describe_intent
+
+    assert _describe_intent(None) == "working on that"
+    assert _describe_intent("check_refund_status") == "working on your check refund status request"
