@@ -40,6 +40,7 @@ import latency
 from continuity import Intent
 from latency import FillerPolicy, GapCover, LatencyTracker
 from metrics import MetricsLog
+from metrics_ws_bridge import run_ws_bridge
 from playback import PlaybackLedger
 from tools import register_tools
 from turn_manager import TurnManager
@@ -246,6 +247,7 @@ def prewarm(proc: agents.JobProcess):
 
 
 async def entrypoint(ctx: agents.JobContext):
+    asyncio.create_task(run_ws_bridge())
     await ctx.connect()
 
     stress_delay = os.environ.get("STRESS_TEST_TOOL_DELAY_MS", "0")
