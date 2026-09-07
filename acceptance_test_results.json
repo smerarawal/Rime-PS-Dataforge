@@ -1,20 +1,128 @@
-[
-  {
-    "event": "interrupt_detected",
-    "timestamp": 1788602804.0983505,
-    "turn_id": 1,
-    "trial": 19
-  },
-  {
-    "event": "audio_stopped",
-    "timestamp": 1788602804.0983505,
-    "turn_id": 1,
-    "trial": 19
-  },
-  {
-    "event": "stale_result_correctly_blocked",
-    "timestamp": 1788602807.6104755,
-    "turn_id": 1,
-    "trial": 19
-  }
-]
+{
+  "generated_at": 1788792695.3392,
+  "trials": 20,
+  "tool_delay_ms": 4000,
+  "suites": [
+    {
+      "suite": "A. perceived response time",
+      "passed": true,
+      "instrumentation_overhead_us_per_turn": 12.54,
+      "filler_threshold_ms": 300.0,
+      "perceived_time_to_audio_p50_ms": 307.2,
+      "perceived_time_to_audio_p95_ms": 312.4,
+      "note": "Perceived-time numbers are for the gap-cover path only. Real pipeline TTFA comes from a live run (live_session_latency.json)."
+    },
+    {
+      "suite": "B. interruption and recovery",
+      "passed": true,
+      "trials": 20,
+      "stale_results_leaked": 0,
+      "tool_cancellation_latency_p50_ms": 0.0,
+      "tool_cancellation_latency_p95_ms": 32.0,
+      "state_recovery": {
+        "played_fraction": 0.25,
+        "confidence": "estimated",
+        "history_kept_full_text": false,
+        "history_is_a_prefix_of_what_was_said": true,
+        "no_partial_words": true,
+        "passed": true
+      },
+      "note": "tool_cancellation_latency measures how fast the in-process fencing/cancellation logic reacts. It is NOT the 'Rime audio stops within X ms' claim \u2014 that needs a live run."
+    },
+    {
+      "suite": "C. continuity during tool work",
+      "passed": true,
+      "scenarios": [
+        {
+          "utterance": "are you still there?",
+          "intent": "status_request",
+          "expected_intent": "status_request",
+          "work_kept": true,
+          "result_delivered": true,
+          "immediate_reply": "Still checking order 1002 \u2014 just started.",
+          "routing_decision_ms": 0.209,
+          "outcome_if_dropped": null,
+          "passed": true
+        },
+        {
+          "utterance": "any luck?",
+          "intent": "status_request",
+          "expected_intent": "status_request",
+          "work_kept": true,
+          "result_delivered": true,
+          "immediate_reply": "Still checking order 1002 \u2014 just started.",
+          "routing_decision_ms": 0.279,
+          "outcome_if_dropped": null,
+          "passed": true
+        },
+        {
+          "utterance": "while you're at it check the refund too",
+          "intent": "constraint",
+          "expected_intent": "constraint",
+          "work_kept": true,
+          "result_delivered": true,
+          "immediate_reply": "Got it \u2014 while you're at it check the refund too. Still checking order 1002.",
+          "routing_decision_ms": 0.399,
+          "outcome_if_dropped": null,
+          "passed": true
+        },
+        {
+          "utterance": "mhm",
+          "intent": "affirmation",
+          "expected_intent": "affirmation",
+          "work_kept": true,
+          "result_delivered": true,
+          "immediate_reply": null,
+          "routing_decision_ms": 0.087,
+          "outcome_if_dropped": null,
+          "passed": true
+        },
+        {
+          "utterance": "never mind",
+          "intent": "cancel",
+          "expected_intent": "cancel",
+          "work_kept": false,
+          "result_delivered": false,
+          "immediate_reply": "Okay, I've stopped checking order 1002. What would you like instead?",
+          "routing_decision_ms": 0.105,
+          "outcome_if_dropped": "CancelledError",
+          "passed": true
+        },
+        {
+          "utterance": "actually, what's your return policy?",
+          "intent": "new_request",
+          "expected_intent": "new_request",
+          "work_kept": false,
+          "result_delivered": false,
+          "immediate_reply": null,
+          "routing_decision_ms": 0.426,
+          "outcome_if_dropped": "CancelledError",
+          "passed": true
+        }
+      ],
+      "worst_routing_decision_ms": 0.426,
+      "note": "Routing runs on the interrupt path, so its cost is part of perceived latency \u2014 it is asserted to stay under 5ms and needs no model round-trip."
+    }
+  ],
+  "all_passed": true,
+  "events": [
+    {
+      "event": "interrupt_detected",
+      "timestamp": 1788792693.622692,
+      "turn_id": 1,
+      "trial": 19
+    },
+    {
+      "event": "tool_task_cancelled",
+      "timestamp": 1788792693.6234756,
+      "turn_id": 1,
+      "trial": 19
+    },
+    {
+      "event": "tool_cancellation_resolved",
+      "timestamp": 1788792693.6234756,
+      "turn_id": 1,
+      "trial": 19
+    }
+  ]
+}

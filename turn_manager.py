@@ -11,10 +11,28 @@ Core design principle: the staleness check happens right before a result
 is used/spoken, not just once when the work started. Cancellation
 (task.cancel()) is best-effort and can fail to land in time — the
 point-of-use check is what actually guarantees correctness.
+
+This module also owns the in-flight *work registry* that Direction 3
+(continuity during tool work) is built on. A tool call registers itself as
+PendingWork; a mid-tool user utterance is routed through
+``route_utterance()``, which decides — before any turn bookkeeping happens —
+whether that work should be superseded, kept, or cancelled. Work that is kept
+is carried forward onto the new turn id, which is the single, audited
+exception to "an old stamp means stale".
 """
 
-import time
 import asyncio
+import time
+from typing import Optional
+
+from continuity import (
+    Intent,
+    PendingWork,
+    UtteranceRouter,
+    cancel_sentence,
+    constraint_sentence,
+    status_sentence,
+)
 
 
 class StaleResultError(Exception):
@@ -22,10 +40,48 @@ class StaleResultError(Exception):
     pass
 
 
+class TurnDecision:
+    """What ``route_utterance`` decided to do with a user utterance.
+
+    ``reply`` is a sentence the caller should speak immediately (status,
+    cancellation acknowledgement, constraint acknowledgement) — it exists so
+    the session stays audibly responsive during tool work without waiting on
+    the LLM. ``superseded`` says whether the turn id advanced, i.e. whether
+    everything stamped with the old turn is now stale.
+    """
+
+    def __init__(
+        self,
+        intent: Intent,
+        superseded: bool,
+        turn_id: int,
+        reply: Optional[str] = None,
+        work_kept: bool = False,
+        needs_llm: bool = True,
+    ):
+        self.intent = intent
+        self.superseded = superseded
+        self.turn_id = turn_id
+        self.reply = reply
+        self.work_kept = work_kept
+        # False when the decision is fully handled by ``reply`` and dispatching
+        # the LLM would only produce a redundant second answer.
+        self.needs_llm = needs_llm
+
+    def __repr__(self) -> str:
+        return (
+            f"TurnDecision({self.intent.value}, superseded={self.superseded}, "
+            f"turn_id={self.turn_id}, work_kept={self.work_kept}, reply={self.reply!r})"
+        )
+
+
 class TurnManager:
-    def __init__(self):
+    def __init__(self, router: Optional[UtteranceRouter] = None, clock=time.perf_counter):
         self.current_turn_id = 0
         self._log = []
+        self._clock = clock
+        self._router = router or UtteranceRouter()
+
         # Tracks only the currently-running TOOL task (e.g. a slow order
         # lookup), not the broader LLM generation task. Cancelling the whole
         # generation task turned out to be too broad — it also disrupted the
@@ -35,6 +91,15 @@ class TurnManager:
         # task avoids that side effect while still stopping a slow lookup
         # dead rather than letting it run to completion.
         self.active_tool_task = None
+
+        # In-flight tool work, keyed by id. Kept as a registry rather than a
+        # single slot so a status question can describe *what* is running.
+        self._work: dict = {}
+        self._next_work_id = 1
+
+    # ------------------------------------------------------------------
+    # turn identity
+    # ------------------------------------------------------------------
 
     def start_new_turn(self) -> int:
         """Call this whenever a new user utterance is committed, or on interrupt."""
@@ -95,9 +160,157 @@ class TurnManager:
         slip past is_stale() undetected — without the side effect of
         disrupting the framework's own reply-generation orchestration for
         the NEW turn."""
+        cancelled_any = False
+        for work in list(self._work.values()):
+            if work.task is not None and not work.task.done():
+                work.task.cancel()
+                work.cancelled = True
+                cancelled_any = True
         if self.active_tool_task is not None and not self.active_tool_task.done():
             self.active_tool_task.cancel()
+            cancelled_any = True
+        if cancelled_any:
             self._log_event("active_tool_task_cancelled_on_interrupt", self.current_turn_id)
+
+    # ------------------------------------------------------------------
+    # in-flight work registry (Direction 3)
+    # ------------------------------------------------------------------
+
+    def register_work(self, description: str, task=None) -> PendingWork:
+        """Register a tool call as in-flight. ``description`` is spoken aloud
+        verbatim in status replies, so phrase it as a continuation of "Still
+        ..." — e.g. "checking order 1002"."""
+        work = PendingWork(self._next_work_id, self.current_turn_id, description, task, clock=self._clock)
+        self._work[work.work_id] = work
+        self._next_work_id += 1
+        if task is not None:
+            self.active_tool_task = task
+        self._log_event("work_registered", work.turn_id, description)
+        return work
+
+    def complete_work(self, work_id: int) -> None:
+        work = self._work.get(work_id)
+        if work is not None:
+            work.done_at = self._clock()
+            self._log_event("work_completed", work.turn_id, work.description)
+            self._work.pop(work_id, None)
+            if work.task is not None and work.task is self.active_tool_task:
+                self.active_tool_task = None
+
+    def pending_work(self) -> Optional[PendingWork]:
+        """The most recently started work that is still running."""
+        running = [w for w in self._work.values() if w.is_running()]
+        if not running:
+            return None
+        return max(running, key=lambda w: w.started_at)
+
+    def has_pending_work(self) -> bool:
+        return self.pending_work() is not None
+
+    def carry_forward(self, work: PendingWork) -> int:
+        """Advance a piece of in-flight work onto the current turn so its
+        point-of-use staleness check still passes.
+
+        This is the ONE sanctioned way for work to survive a turn boundary. It
+        is only ever called for utterances the router classified as keeping
+        work (status / constraint / backchannel), and every use is written to
+        the audit log — if carried-forward work ever gets spoken out of
+        context, the log says exactly which utterance authorized it.
+        """
+        old = work.turn_id
+        work.turn_id = self.current_turn_id
+        self._log_event("work_carried_forward", self.current_turn_id, f"from_turn={old}: {work.description}")
+        return work.turn_id
+
+    def add_constraint(self, work: PendingWork, constraint: str) -> None:
+        work.constraints.append(constraint)
+        self._log_event("constraint_added", work.turn_id, constraint)
+
+    def cancel_work(self, work: PendingWork, reason: str = "user_cancelled") -> None:
+        work.cancelled = True
+        work.done_at = self._clock()
+        if work.task is not None and not work.task.done():
+            work.task.cancel()
+        self._work.pop(work.work_id, None)
+        if work.task is not None and work.task is self.active_tool_task:
+            self.active_tool_task = None
+        self._log_event("work_cancelled", work.turn_id, reason)
+
+    def is_work_stale(self, work: PendingWork) -> bool:
+        """Point-of-use check for tool work. Reads ``work.turn_id`` live, so
+        work that was carried forward passes and work that was superseded does
+        not — the caller must not cache the stamp."""
+        if work.cancelled:
+            return True
+        return self.is_stale(work.turn_id)
+
+    # ------------------------------------------------------------------
+    # utterance routing (Direction 3)
+    # ------------------------------------------------------------------
+
+    def route_utterance(self, text: str) -> TurnDecision:
+        """Decide what a user utterance means for in-flight work, then apply
+        the turn bookkeeping that decision implies.
+
+        Every branch advances the turn id. That is deliberate: the utterance
+        is a real user turn either way, LiveKit will have stopped playback for
+        it, and stale *LLM generation* from the previous turn must always be
+        fenced. What differs between branches is whether in-flight tool work
+        is carried forward onto the new turn or left behind as stale.
+        """
+        work = self.pending_work()
+        classification = self._router.classify(text, work_pending=work is not None)
+        intent = classification.intent
+
+        previous_turn = self.current_turn_id
+        new_turn = self.start_new_turn()
+        self._log_event("utterance_routed", new_turn, f"{intent.value}: {text!r}")
+
+        if work is None:
+            # Nothing in flight; an ordinary turn.
+            return TurnDecision(intent, superseded=True, turn_id=new_turn)
+
+        if intent is Intent.CANCEL:
+            self.cancel_work(work, reason="user_cancelled")
+            return TurnDecision(
+                intent, superseded=True, turn_id=new_turn,
+                reply=cancel_sentence(work), work_kept=False, needs_llm=False,
+            )
+
+        if intent is Intent.STATUS_REQUEST:
+            self.carry_forward(work)
+            return TurnDecision(
+                intent, superseded=False, turn_id=new_turn,
+                reply=status_sentence(work), work_kept=True, needs_llm=False,
+            )
+
+        if intent is Intent.CONSTRAINT:
+            self.add_constraint(work, classification.text)
+            self.carry_forward(work)
+            return TurnDecision(
+                intent, superseded=False, turn_id=new_turn,
+                reply=constraint_sentence(work, classification.text),
+                work_kept=True, needs_llm=False,
+            )
+
+        if intent is Intent.AFFIRMATION:
+            # A backchannel ("mhm", "ok") is not a request for anything. Keep
+            # the work and say nothing — answering it would talk over the user
+            # for no reason.
+            self.carry_forward(work)
+            return TurnDecision(
+                intent, superseded=False, turn_id=new_turn,
+                reply=None, work_kept=True, needs_llm=False,
+            )
+
+        # NEW_REQUEST: the user moved on. Kill the work and fence its result.
+        self.cancel_work(work, reason="superseded_by_new_request")
+        self._log_event("work_superseded", previous_turn, work.description)
+        return TurnDecision(intent, superseded=True, turn_id=new_turn, work_kept=False)
+
+    # ------------------------------------------------------------------
+    # audit
+    # ------------------------------------------------------------------
 
     def _log_event(self, event: str, turn_id: int, detail: str = ""):
         self._log.append({

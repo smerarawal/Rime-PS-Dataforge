@@ -6,3 +6,10 @@ node_modules/
 agent-starter-react/.next/ 
 agent-starter-react/.env.local 
 agent-starter-react/node_modules/ 
+
+# generated evidence from live runs
+live_session_latency.json
+live_session_metrics.json
+latency_results.json
+metrics_log.json
+.pytest_cache/
