@@ -1,15 +1,36 @@
-.env 
-.env.local 
-__pycache__/ 
-*.pyc 
-node_modules/ 
-agent-starter-react/.next/ 
-agent-starter-react/.env.local 
-agent-starter-react/node_modules/ 
+# --- secrets ---
+.env
+.env.local
+agent-starter-react/.env.local
 
-# generated evidence from live runs
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# --- node / frontends ---
+node_modules/
+agent-starter-react/node_modules/
+agent-starter-react/.next/
+prisha-react/node_modules/
+prisha-react/dist/
+
+# --- generated evidence from live runs ---
 live_session_latency.json
 live_session_metrics.json
 latency_results.json
 metrics_log.json
-.pytest_cache/
+*.log
+
+# --- editors / os ---
+.idea/
+.DS_Store

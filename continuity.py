@@ -198,25 +198,40 @@ class PendingWork:
         }
 
 
-def status_sentence(work: PendingWork) -> str:
+# The sentence builders below take plain values rather than a PendingWork, so
+# both runtimes in this repo can share one voice: the LiveKit agent, which has
+# a PendingWork, and the orchestrator service in backend/app, which has a
+# Request. Divergent phrasing between the two would be a user-visible seam.
+
+def describe_elapsed(secs: float) -> str:
+    if secs < 2:
+        return "just started"
+    if secs < 10:
+        return f"about {int(round(secs))} seconds in"
+    return f"{int(round(secs))} seconds in so far"
+
+
+def status_sentence_for(description: str, elapsed_s: float, constraints=()) -> str:
     """A spoken status line. Says what is happening and roughly how long it
     has been — a bare "still working on it" is what makes users repeat
     themselves, which is how a turn ends up superseded for no reason."""
-    secs = work.elapsed_s()
-    if secs < 2:
-        how_long = "just started"
-    elif secs < 10:
-        how_long = f"about {int(round(secs))} seconds in"
-    else:
-        how_long = f"{int(round(secs))} seconds in so far"
     tail = ""
-    if work.constraints:
-        tail = f" I've got your note about {work.constraints[-1]}."
-    return f"Still {work.description} — {how_long}.{tail}"
+    constraints = list(constraints or ())
+    if constraints:
+        tail = f" I've got your note about {constraints[-1]}."
+    return f"Still {description} — {describe_elapsed(elapsed_s)}.{tail}"
+
+
+def cancel_sentence_for(description: str) -> str:
+    return f"Okay, I've stopped {description}. What would you like instead?"
+
+
+def status_sentence(work: PendingWork) -> str:
+    return status_sentence_for(work.description, work.elapsed_s(), work.constraints)
 
 
 def cancel_sentence(work: PendingWork) -> str:
-    return f"Okay, I've stopped {work.description}. What would you like instead?"
+    return cancel_sentence_for(work.description)
 
 
 def constraint_sentence(work: PendingWork, constraint: str) -> str:

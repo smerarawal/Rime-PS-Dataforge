@@ -1,0 +1,1 @@
+"""Rime hackathon backend package."""
