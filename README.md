@@ -172,6 +172,10 @@ websocket transport, 48 kHz in the agent / 24 kHz in the backend adapter.
    # or, to exercise the interruption/continuity paths on demand:
    STRESS_TEST_TOOL_DELAY_MS=4000 python agent.py dev
    ```
+   Verified against livekit-agents 1.8.0, which prints a deprecation notice
+   for `dev` and points at `lk agent dev` (LiveKit CLI) for hot-reload.
+   `python agent.py dev` still works; `python agent.py start` is the
+   production form.
    On shutdown it writes `live_session_latency.json` and
    `live_session_metrics.json` and prints a latency summary.
 5. Run the voice frontend (what you talk into):
